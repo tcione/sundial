@@ -17,6 +17,11 @@ See `original-sundial.sh` for the complete implementation. Key features:
 - Adding dependencies incrementally as needed
 - Focusing on understanding concepts deeply
 
+## Communication Guidelines
+- Tone down on compliments
+- Avoid phrases like "good question", "excellent thought", or overly flattering language
+- Focus on direct, concise communication
+
 ## Current Progress
 
 ### ✅ Completed
@@ -27,10 +32,12 @@ See `original-sundial.sh` for the complete implementation. Key features:
 5. **HTTP Function** - Started `fetch_sunrise_sunset()` function
 
 ### 🔄 Current Step
-**Implementing HTTP client for sunrise/sunset API**
-- Added `fetch_sunrise_sunset()` function 
-- Using `Result<String, Box<dyn std::error::Error>>` return type
-- Function needs small fix: missing `return` in `Ok(text);`
+**Adding time parsing functionality**
+- Fixed HTTP function syntax error (`Ok(text)` instead of `Ok(text);`)
+- Successfully tested HTTP function - it works with rustls-tls
+- Added `SunTimes` struct with `NaiveTime` fields
+- Added `parse_military_time()` helper function
+- Next: refactor `fetch_sunrise_sunset()` to parse JSON and return `SunTimes`
 
 ### 📚 Concepts Learned
 - **Result<T, E>**: Sum type/tagged union for error handling
@@ -38,11 +45,17 @@ See `original-sundial.sh` for the complete implementation. Key features:
 - **dyn trait**: Trait objects for dynamic dispatch
 - **? operator**: Error propagation
 - **format! macro**: String interpolation
+- **References (&T)**: Borrowing data without taking ownership
+- **String vs &str**: Owned vs borrowed string data
+- **String slices**: Views into string data
+- **derive**: Auto-generating trait implementations
+- **.into()**: Type conversion using Into trait
+- **ok_or_else()**: Converting Option to Result
 
 ### 📋 Next Steps
-1. Fix the return statement in `fetch_sunrise_sunset()`
-2. Test the HTTP function
-3. Add JSON parsing (will need serde)
+1. Refactor `fetch_sunrise_sunset()` to parse JSON and return `SunTimes` struct
+2. Test the refactored function
+3. Write unit tests for time parsing
 4. Implement time comparison logic
 5. Add file I/O for state management
 6. Implement process checking
@@ -50,15 +63,17 @@ See `original-sundial.sh` for the complete implementation. Key features:
 
 ### 🎯 Dependencies Added
 ```toml
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls"], default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
 ```
 
 ### 🎯 Dependencies Still Needed
-- `serde` (JSON parsing)
-- `chrono` (time handling)
 - Others TBD as we progress
 
 ## Current Code Status
-- `main.rs`: Has basic structure + `fetch_sunrise_sunset()` function
-- Function needs fix: line 10 should be `Ok(text)` not `Ok(text);`
-- Ready to test HTTP functionality once fixed
+- `main.rs`: Has working HTTP function + SunTimes struct + time parsing helper
+- Added `SunTimes` struct with `NaiveTime` fields for sunrise/sunset
+- Added `parse_military_time()` function to convert "0652" → NaiveTime
+- HTTP function currently returns raw JSON string
+- Ready to refactor HTTP function to parse JSON and return SunTimes struct
