@@ -7,6 +7,12 @@ struct SunTimes {
     sunset: NaiveTime,
 }
 
+#[derive(Debug)]
+struct ScreenState {
+    temperature: String,
+    gamma: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct ApiResponse {
     results: ApiResults,
@@ -37,16 +43,27 @@ fn fetch_sunrise_sunset() -> Result<SunTimes, Box<dyn std::error::Error>> {
     Ok(SunTimes { sunrise, sunset })
 }
 
-fn is_hyprsunset_running() -> Result<bool, Box<dyn std::error::Error>> {
-    let output = std::process::Command::new("pgrep")
-        .arg("hyprsunset")
-        .output()?;
-    Ok(output.status.success())
+fn calculate_screen_state(target_time: NaiveTime, sun_times: SunTimes) -> ScreenState {
+    let is_day = target_time >= sun_times.sunrise && target_time < sun_times.sunset;
+
+    if is_day {
+        return ScreenState {
+            temperature: String::from("6000"),
+            gamma: String::from("100")
+        };
+    }
+
+    ScreenState {
+        temperature: String::from("2800"),
+        gamma: String::from("80")
+    }
 }
 
 fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
-    let is_hyprsunset_running = is_hyprsunset_running()?;
-
+    let hyprsunset_process = std::process::Command::new("pgrep")
+        .arg("hyprsunset")
+        .output()?;
+    let is_hyprsunset_running = hyprsunset_process.status.success();
     if is_hyprsunset_running {
         return Ok(());
     }
@@ -61,27 +78,16 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
 fn manage_screen() -> Result<(), Box<dyn std::error::Error>> {
     let sun_times = fetch_sunrise_sunset()?;
     let now = chrono::Utc::now().time();
-    let is_day = now >= sun_times.sunrise && now < sun_times.sunset;
-
-    let temperature;
-    let gamma;
-
-    if is_day {
-        temperature = "6000";
-        gamma = "100"
-    } else {
-        temperature = "2800";
-        gamma = "80"
-    }
+    let screen_state = calculate_screen_state(now, sun_times);
 
     std::process::Command::new("hyprctl")
-        .args(["hyprsunset", "temperature", temperature])
+        .args(["hyprsunset", "temperature", &screen_state.temperature])
         .output()?;
     std::process::Command::new("hyprctl")
-        .args(["hyprsunset", "gamma", gamma])
+        .args(["hyprsunset", "gamma", &screen_state.gamma])
         .output()?;
 
-    return Ok(())
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
