@@ -43,7 +43,7 @@ fn fetch_sunrise_sunset() -> Result<SunTimes, Box<dyn std::error::Error>> {
     Ok(SunTimes { sunrise, sunset })
 }
 
-fn calculate_screen_state(target_time: NaiveTime, sun_times: SunTimes) -> ScreenState {
+fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes) -> ScreenState {
     let is_day = target_time >= sun_times.sunrise && target_time < sun_times.sunset;
 
     if is_day {
@@ -78,7 +78,7 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
 fn manage_screen() -> Result<(), Box<dyn std::error::Error>> {
     let sun_times = fetch_sunrise_sunset()?;
     let now = chrono::Utc::now().time();
-    let screen_state = calculate_screen_state(now, sun_times);
+    let screen_state = calculate_screen_state(now, &sun_times);
 
     std::process::Command::new("hyprctl")
         .args(["hyprsunset", "temperature", &screen_state.temperature])
