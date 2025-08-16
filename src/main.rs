@@ -58,16 +58,37 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Sundial starting...");
-
-    start_hyprsunset()?;
-
+fn manage_screen() -> Result<(), Box<dyn std::error::Error>> {
     let sun_times = fetch_sunrise_sunset()?;
     let now = chrono::Utc::now().time();
     let is_day = now >= sun_times.sunrise && now < sun_times.sunset;
 
-    // TODO: update temperature if needed
+    let temperature;
+    let gamma;
+
+    if is_day {
+        temperature = "6000";
+        gamma = "100"
+    } else {
+        temperature = "2800";
+        gamma = "80"
+    }
+
+    std::process::Command::new("hyprctl")
+        .args(["hyprsunset", "temperature", temperature])
+        .output()?;
+    std::process::Command::new("hyprctl")
+        .args(["hyprsunset", "gamma", gamma])
+        .output()?;
+
+    return Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Sundial starting...");
+
+    start_hyprsunset()?;
+    manage_screen()?;
 
     Ok(())
 }
