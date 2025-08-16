@@ -58,20 +58,16 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Sundial starting...");
 
-    match fetch_sunrise_sunset() {
-        Ok(sun_times) => {
-            println!("Sun times: {:?}", sun_times);
-            let now = chrono::Utc::now().time();
-            println!("Current UTC time: {:?}", now);
-            let is_day = now >= sun_times.sunrise && now < sun_times.sunset;
-            println!("Is day: {}", is_day);
-            start_hyprsunset();
-        },
-        Err(e) => println!("Error: {}", e),
-    }
+    start_hyprsunset()?;
+
+    let sun_times = fetch_sunrise_sunset()?;
+    let now = chrono::Utc::now().time();
+    let is_day = now >= sun_times.sunrise && now < sun_times.sunset;
 
     // TODO: update temperature if needed
+
+    Ok(())
 }
