@@ -37,6 +37,27 @@ fn fetch_sunrise_sunset() -> Result<SunTimes, Box<dyn std::error::Error>> {
     Ok(SunTimes { sunrise, sunset })
 }
 
+fn is_hyprsunset_running() -> Result<bool, Box<dyn std::error::Error>> {
+    let output = std::process::Command::new("pgrep")
+        .arg("hyprsunset")
+        .output()?;
+    Ok(output.status.success())
+}
+
+fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
+    let is_hyprsunset_running = is_hyprsunset_running()?;
+
+    if is_hyprsunset_running {
+        return Ok(());
+    }
+
+    std::process::Command::new("systemctl")
+        .args(["--user", "start", "hyprsunset"])
+        .output()?;
+
+    Ok(())
+}
+
 fn main() {
     println!("Sundial starting...");
 
@@ -47,10 +68,10 @@ fn main() {
             println!("Current UTC time: {:?}", now);
             let is_day = now >= sun_times.sunrise && now < sun_times.sunset;
             println!("Is day: {}", is_day);
+            start_hyprsunset();
         },
         Err(e) => println!("Error: {}", e),
     }
 
-    // TODO: check process status
     // TODO: update temperature if needed
 }
