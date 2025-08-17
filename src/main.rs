@@ -24,14 +24,17 @@ struct ApiResults {
     sunset: String,
 }
 
-fn fetch_sunrise_sunset() -> Result<SunTimes, Box<dyn std::error::Error>> {
+fn build_sunrisesunset_url() -> String {
     let berlin_lat = "52.56";
     let berlin_lon = "13.39";
-    let url = format!(
+    format!(
         "https://api.sunrisesunset.io/json?lat={}&lng={}&time_format=unix",
         berlin_lat, berlin_lon
-    );
-    let response = reqwest::blocking::get(&url)?;
+    )
+}
+
+fn fetch_sunrise_sunset(url: &str) -> Result<SunTimes, Box<dyn std::error::Error>> {
+    let response = reqwest::blocking::get(url)?;
     let api_response: ApiResponse = response.json()?;
 
     let sunrise_timestamp: i64 = api_response.results.sunrise.parse()?;
@@ -76,7 +79,8 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn manage_screen() -> Result<(), Box<dyn std::error::Error>> {
-    let sun_times = fetch_sunrise_sunset()?;
+    let url = build_sunrisesunset_url();
+    let sun_times = fetch_sunrise_sunset(&url)?;
     let now = chrono::Utc::now().time();
     let screen_state = calculate_screen_state(now, &sun_times);
 
