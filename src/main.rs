@@ -1,7 +1,7 @@
 use chrono::NaiveTime;
 use serde::Deserialize;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct SunTimes {
     sunrise: NaiveTime,
     sunset: NaiveTime,
@@ -106,4 +106,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     manage_screen()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::Server;
+
+    #[test]
+    fn test_fetch_sunrise_sunset() {
+        let mut server = Server::new();
+        let url_path = format!("/json?lat={}&lng={}&time_format=unix", BERLIN_LAT, BERLIN_LON);
+        let mock = server.mock("GET", url_path.as_str())
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{
+              "results": {
+                "date": "2025-08-17",
+                "sunrise": "1755402810",
+                "sunset": "1755455425",
+                "first_light": "1755393963",
+                "last_light": "1755464272",
+                "dawn": "1755400509",
+                "dusk": "1755457726",
+                "solar_noon": "1755429118",
+                "golden_hour": "1755452571",
+                "day_length": "14:36:55",
+                "timezone": "UTC",
+                "utc_offset": 0
+              },
+              "status": "OK"
+            }"#)
+            .create();
+        let mock_url = format!("{}{}", server.url(), url_path);
+
+        let result = fetch_sunrise_sunset(&mock_url).unwrap();
+        let expected_result = SunTimes {
+            sunrise: chrono::DateTime::from_timestamp(1755402810, 0).unwrap().time(),
+            sunset: chrono::DateTime::from_timestamp(1755455425, 0).unwrap().time(),
+        };
+
+        assert_eq!(result, expected_result);
+        mock.assert();
+    }
 }
