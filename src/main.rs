@@ -9,8 +9,8 @@ struct SunTimes {
 
 #[derive(Debug)]
 struct ScreenState {
-    temperature: String,
-    gamma: String,
+    temperature: &'static str,
+    gamma: &'static str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,12 +24,17 @@ struct ApiResults {
     sunset: String,
 }
 
+const BERLIN_LAT: &str = "52.56";
+const BERLIN_LON: &str = "13.39";
+const DAY_TEMPERATURE: &str = "6000";
+const DAY_GAMMA: &str = "100";
+const NIGHT_TEMPERATURE: &str = "2800";
+const NIGHT_GAMMA: &str = "80";
+
 fn build_sunrisesunset_url() -> String {
-    let berlin_lat = "52.56";
-    let berlin_lon = "13.39";
     format!(
         "https://api.sunrisesunset.io/json?lat={}&lng={}&time_format=unix",
-        berlin_lat, berlin_lon
+        BERLIN_LAT, BERLIN_LON
     )
 }
 
@@ -51,14 +56,14 @@ fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes) -> Scree
 
     if is_day {
         return ScreenState {
-            temperature: String::from("6000"),
-            gamma: String::from("100")
+            temperature: DAY_TEMPERATURE,
+            gamma: DAY_GAMMA,
         };
     }
 
     ScreenState {
-        temperature: String::from("2800"),
-        gamma: String::from("80")
+        temperature: NIGHT_TEMPERATURE,
+        gamma: NIGHT_GAMMA,
     }
 }
 
