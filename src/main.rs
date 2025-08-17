@@ -7,7 +7,7 @@ struct SunTimes {
     sunset: NaiveTime,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct ScreenState {
     temperature: &'static str,
     gamma: &'static str,
@@ -148,5 +148,29 @@ mod tests {
 
         assert_eq!(result, expected_result);
         mock.assert();
+    }
+
+    #[test]
+    fn test_calculate_screen_state() {
+        let sunrise = NaiveTime::from_hms_opt(6, 0, 0).unwrap();
+        let sunset = NaiveTime::from_hms_opt(18, 0, 0).unwrap();
+        let sun_times = SunTimes { sunrise, sunset };
+        let test_cases = vec![
+            (NaiveTime::from_hms_opt(02, 0, 00).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA, "Before dawn"),
+            (NaiveTime::from_hms_opt(05, 0, 59).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA,   "Right before sunrise"),
+            (NaiveTime::from_hms_opt(06, 0, 00).unwrap(), DAY_TEMPERATURE,   DAY_GAMMA,   "Sunrise"),
+            (NaiveTime::from_hms_opt(10, 0, 00).unwrap(), DAY_TEMPERATURE,   DAY_GAMMA,   "Day"),
+            (NaiveTime::from_hms_opt(18, 0, 00).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA,   "Sunset"),
+            (NaiveTime::from_hms_opt(22, 0, 00).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA, "Night"),
+        ];
+
+        for (time, expected_temperature, expected_gamma, description) in test_cases {
+            let screen_state = calculate_screen_state(time, &sun_times);
+            let expected_screen_state = ScreenState {
+                temperature: expected_temperature,
+                gamma: expected_gamma,
+            };
+            assert_eq!(screen_state, expected_screen_state, "Screen state failed for {}", description);
+        }
     }
 }
