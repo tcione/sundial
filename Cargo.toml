@@ -7,6 +7,8 @@ edition = "2024"
 reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls"], default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"
+directories = "5.0"
 
 [dev-dependencies]
 mockito = "1.2"

@@ -1,5 +1,6 @@
 use chrono::NaiveTime;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Debug, PartialEq)]
 struct SunTimes {
@@ -9,8 +10,8 @@ struct SunTimes {
 
 #[derive(Debug, PartialEq)]
 struct ScreenState {
-    temperature: &'static str,
-    gamma: &'static str,
+    temperature: String,
+    gamma: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +25,26 @@ struct ApiResults {
     sunset: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct Config {
+    location: LocationConfig,
+    screen: ScreenConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct LocationConfig {
+    latitude: String,
+    longitude: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ScreenConfig {
+    day_temperature: String,
+    day_gamma: String,
+    night_temperature: String,
+    night_gamma: String,
+}
+
 const BERLIN_LAT: &str = "52.56";
 const BERLIN_LON: &str = "13.39";
 const DAY_TEMPERATURE: &str = "6000";
@@ -31,10 +52,50 @@ const DAY_GAMMA: &str = "100";
 const NIGHT_TEMPERATURE: &str = "2800";
 const NIGHT_GAMMA: &str = "80";
 
-fn build_sunrisesunset_url() -> String {
+fn get_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let dirs = directories::ProjectDirs::from("", "", "sundial")
+        .ok_or("Could not find config directory")?;
+
+    let config_dir = dirs.config_dir();
+    std::fs::create_dir_all(&config_dir)?;
+
+    Ok(config_dir.to_path_buf())
+}
+
+fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Error>> {
+    let config_file = config_dir.join("config.toml");
+
+    if config_file.exists() {
+        let config_content = std::fs::read_to_string(config_file)?;
+        let config: Config = toml::from_str(&config_content)?;
+
+        return Ok(config);
+    }
+
+    let default_config = Config {
+        location: LocationConfig {
+            latitude: BERLIN_LAT.to_string(),
+            longitude: BERLIN_LON.to_string(),
+        },
+        screen: ScreenConfig {
+            day_temperature: DAY_TEMPERATURE.to_string(),
+            day_gamma: DAY_GAMMA.to_string(),
+            night_temperature: NIGHT_TEMPERATURE.to_string(),
+            night_gamma: NIGHT_GAMMA.to_string(),
+        },
+    };
+
+    let config_toml = toml::to_string(&default_config)?;
+    std::fs::write(config_file, config_toml)?;
+
+    Ok(default_config)
+}
+
+fn build_sunrisesunset_url(config: &Config) -> String {
     format!(
         "https://api.sunrisesunset.io/json?lat={}&lng={}&time_format=unix",
-        BERLIN_LAT, BERLIN_LON
+        config.location.latitude,
+        config.location.longitude,
     )
 }
 
@@ -51,19 +112,19 @@ fn fetch_sunrise_sunset(url: &str) -> Result<SunTimes, Box<dyn std::error::Error
     Ok(SunTimes { sunrise, sunset })
 }
 
-fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes) -> ScreenState {
+fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes, config: &Config) -> ScreenState {
     let is_day = target_time >= sun_times.sunrise && target_time < sun_times.sunset;
 
     if is_day {
         return ScreenState {
-            temperature: DAY_TEMPERATURE,
-            gamma: DAY_GAMMA,
+            temperature: config.screen.day_temperature.clone(),
+            gamma: config.screen.day_gamma.clone(),
         };
     }
 
     ScreenState {
-        temperature: NIGHT_TEMPERATURE,
-        gamma: NIGHT_GAMMA,
+        temperature: config.screen.night_temperature.clone(),
+        gamma: config.screen.night_gamma.clone(),
     }
 }
 
@@ -83,11 +144,12 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn manage_screen() -> Result<(), Box<dyn std::error::Error>> {
-    let url = build_sunrisesunset_url();
+fn manage_screen(config_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config(config_dir)?;
+    let url = build_sunrisesunset_url(&config);
     let sun_times = fetch_sunrise_sunset(&url)?;
     let now = chrono::Utc::now().time();
-    let screen_state = calculate_screen_state(now, &sun_times);
+    let screen_state = calculate_screen_state(now, &sun_times, &config);
 
     std::process::Command::new("hyprctl")
         .args(["hyprsunset", "temperature", &screen_state.temperature])
@@ -102,8 +164,10 @@ fn manage_screen() -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Sundial starting...");
 
+    let config_dir = get_config_dir()?;
+
     start_hyprsunset()?;
-    manage_screen()?;
+    manage_screen(config_dir)?;
 
     Ok(())
 }
@@ -112,6 +176,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
     use mockito::Server;
+
+    fn create_test_config() -> Config {
+        Config {
+            location: LocationConfig {
+                latitude: "52.56".to_string(),
+                longitude: "13.39".to_string(),
+            },
+            screen: ScreenConfig {
+                day_temperature: "6000".to_string(),
+                day_gamma: "100".to_string(),
+                night_temperature: "2800".to_string(),
+                night_gamma: "80".to_string(),
+            },
+        }
+    }
 
     #[test]
     fn test_fetch_sunrise_sunset() {
@@ -152,25 +231,117 @@ mod tests {
 
     #[test]
     fn test_calculate_screen_state() {
+        let config = create_test_config();
         let sunrise = NaiveTime::from_hms_opt(6, 0, 0).unwrap();
         let sunset = NaiveTime::from_hms_opt(18, 0, 0).unwrap();
         let sun_times = SunTimes { sunrise, sunset };
         let test_cases = vec![
-            (NaiveTime::from_hms_opt(02, 0, 00).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA, "Before dawn"),
-            (NaiveTime::from_hms_opt(05, 0, 59).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA,   "Right before sunrise"),
-            (NaiveTime::from_hms_opt(06, 0, 00).unwrap(), DAY_TEMPERATURE,   DAY_GAMMA,   "Sunrise"),
-            (NaiveTime::from_hms_opt(10, 0, 00).unwrap(), DAY_TEMPERATURE,   DAY_GAMMA,   "Day"),
-            (NaiveTime::from_hms_opt(18, 0, 00).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA,   "Sunset"),
-            (NaiveTime::from_hms_opt(22, 0, 00).unwrap(), NIGHT_TEMPERATURE, NIGHT_GAMMA, "Night"),
+            (
+                NaiveTime::from_hms_opt(02, 0, 00).unwrap(),
+                config.screen.night_temperature.clone(),
+                config.screen.night_gamma.clone(),
+                "Before dawn"
+            ),
+            (
+                NaiveTime::from_hms_opt(05, 0, 59).unwrap(),
+                config.screen.night_temperature.clone(),
+                config.screen.night_gamma.clone(),
+                "Right before sunrise"
+            ),
+            (
+                NaiveTime::from_hms_opt(06, 0, 00).unwrap(),
+                config.screen.day_temperature.clone(),
+                config.screen.day_gamma.clone(),
+                "Sunrise"
+            ),
+            (
+                NaiveTime::from_hms_opt(10, 0, 00).unwrap(),
+                config.screen.day_temperature.clone(),
+                config.screen.day_gamma.clone(),
+                "Day"
+            ),
+            (
+                NaiveTime::from_hms_opt(18, 0, 00).unwrap(),
+                config.screen.night_temperature.clone(),
+                config.screen.night_gamma.clone(),
+                "Sunset"
+            ),
+            (
+                NaiveTime::from_hms_opt(22, 0, 00).unwrap(),
+                config.screen.night_temperature.clone(),
+                config.screen.night_gamma.clone(),
+                "Night"
+            ),
         ];
 
         for (time, expected_temperature, expected_gamma, description) in test_cases {
-            let screen_state = calculate_screen_state(time, &sun_times);
+            let screen_state = calculate_screen_state(time, &sun_times, &config);
             let expected_screen_state = ScreenState {
                 temperature: expected_temperature,
                 gamma: expected_gamma,
             };
             assert_eq!(screen_state, expected_screen_state, "Screen state failed for {}", description);
         }
+    }
+
+    #[test]
+    fn test_load_config_creates_default() {
+        let temp_dir = std::env::temp_dir().join("sundial_test_default");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let result = load_config(temp_dir.clone());
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+
+        // Default values
+        assert_eq!(config.location.latitude, "52.56");
+        assert_eq!(config.location.longitude, "13.39");
+        assert_eq!(config.screen.day_temperature, "6000");
+        assert_eq!(config.screen.day_gamma, "100");
+        assert_eq!(config.screen.night_temperature, "2800");
+        assert_eq!(config.screen.night_gamma, "80");
+
+        let config_file = temp_dir.join("config.toml");
+        assert!(config_file.exists());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_load_config_reads_existing() {
+        let temp_dir = std::env::temp_dir().join("sundial_test_default");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let config_file = temp_dir.join("config.toml");
+        let custom_config_content = r#"
+[location]
+latitude = "40.71"
+longitude = "-74.12"
+
+[screen]
+day_temperature = "5500"
+day_gamma = "90"
+night_temperature = "3000"
+night_gamma = "70"
+"#;
+        std::fs::write(&config_file, custom_config_content).unwrap();
+
+        let result = load_config(temp_dir.clone());
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+
+        // Default values
+        assert_eq!(config.location.latitude, "40.71");
+        assert_eq!(config.location.longitude, "-74.12");
+        assert_eq!(config.screen.day_temperature, "5500");
+        assert_eq!(config.screen.day_gamma, "90");
+        assert_eq!(config.screen.night_temperature, "3000");
+        assert_eq!(config.screen.night_gamma, "70");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
