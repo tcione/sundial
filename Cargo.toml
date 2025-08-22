@@ -9,6 +9,7 @@ serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
 directories = "5.0"
+serde_json = "1.0"
 
 [dev-dependencies]
 mockito = "1.2"

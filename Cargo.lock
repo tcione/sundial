@@ -1183,6 +1183,7 @@ dependencies = [
  "mockito",
  "reqwest",
  "serde",
+ "serde_json",
  "toml",
 ]
 

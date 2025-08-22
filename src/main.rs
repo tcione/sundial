@@ -2,10 +2,15 @@ use chrono::NaiveTime;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct SunTimes {
     sunrise: NaiveTime,
     sunset: NaiveTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct Cache {
+    sun_times: SunTimes,
 }
 
 #[derive(Debug, PartialEq)]
@@ -29,6 +34,7 @@ struct ApiResults {
 struct Config {
     location: LocationConfig,
     screen: ScreenConfig,
+    cache: CacheConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -45,12 +51,18 @@ struct ScreenConfig {
     night_gamma: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct CacheConfig {
+    enabled: bool,
+}
+
 const BERLIN_LAT: &str = "52.56";
 const BERLIN_LON: &str = "13.39";
 const DAY_TEMPERATURE: &str = "6000";
 const DAY_GAMMA: &str = "100";
 const NIGHT_TEMPERATURE: &str = "2800";
 const NIGHT_GAMMA: &str = "80";
+const CACHE_ENABLED: bool = true;
 
 fn get_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let dirs = directories::ProjectDirs::from("", "", "sundial")
@@ -60,6 +72,16 @@ fn get_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&config_dir)?;
 
     Ok(config_dir.to_path_buf())
+}
+
+fn get_data_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let dirs = directories::ProjectDirs::from("", "", "sundial")
+        .ok_or("Could not find config directory")?;
+
+    let data_dir = dirs.data_dir();
+    std::fs::create_dir_all(&data_dir)?;
+
+    Ok(data_dir.to_path_buf())
 }
 
 fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Error>> {
@@ -83,12 +105,55 @@ fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Error>
             night_temperature: NIGHT_TEMPERATURE.to_string(),
             night_gamma: NIGHT_GAMMA.to_string(),
         },
+        cache: CacheConfig {
+            enabled: CACHE_ENABLED,
+        },
     };
 
     let config_toml = toml::to_string(&default_config)?;
     std::fs::write(config_file, config_toml)?;
 
     Ok(default_config)
+}
+
+fn cache_file(data_dir: &PathBuf) -> PathBuf {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    return data_dir.join(format!("cache-{}.json", today))
+}
+
+fn load_cache(config: &Config, data_dir: &PathBuf) -> Result<Option<Cache>, Box<dyn std::error::Error>> {
+    if !config.cache.enabled {
+        return Ok(None);
+    }
+
+    let cache_file = cache_file(data_dir);
+
+    if !cache_file.exists() {
+        return Ok(None);
+    }
+
+    let cache_content = std::fs::read_to_string(cache_file)?;
+    let cache: Cache = serde_json::from_str(&cache_content)?;
+
+    Ok(Some(cache))
+}
+
+fn persist_to_cache(config: &Config, data_dir: &PathBuf, sun_times: &SunTimes) -> Result<bool, Box<dyn std::error::Error>> {
+    if !config.cache.enabled {
+        return Ok(false)
+    }
+
+    std::fs::remove_dir_all(&data_dir)?;
+    std::fs::create_dir_all(&data_dir)?;
+
+    let cache_file = cache_file(data_dir);
+    let cache = Cache { sun_times: sun_times.clone() };
+    let cache_content = serde_json::to_string(&cache)?;
+
+    std::fs::write(cache_file, cache_content)?;
+
+    Ok(true)
 }
 
 fn build_sunrisesunset_url(config: &Config) -> String {
@@ -144,10 +209,23 @@ fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn manage_screen(config_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn manage_screen(config_dir: PathBuf, data_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config(config_dir)?;
-    let url = build_sunrisesunset_url(&config);
-    let sun_times = fetch_sunrise_sunset(&url)?;
+    let sun_times = match load_cache(&config, &data_dir) {
+        Ok(Some(cache)) => { cache.sun_times },
+        Ok(None) => {
+            let url = build_sunrisesunset_url(&config);
+            let sun_times = fetch_sunrise_sunset(&url)?;
+            let _ = persist_to_cache(&config, &data_dir, &sun_times);
+            sun_times
+        },
+        Err(_) => {
+            let url = build_sunrisesunset_url(&config);
+            let sun_times = fetch_sunrise_sunset(&url)?;
+            let _ = persist_to_cache(&config, &data_dir, &sun_times);
+            sun_times
+        }
+    };
     let now = chrono::Utc::now().time();
     let screen_state = calculate_screen_state(now, &sun_times, &config);
 
@@ -165,9 +243,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Sundial starting...");
 
     let config_dir = get_config_dir()?;
+    let data_dir = get_data_dir()?;
 
     start_hyprsunset()?;
-    manage_screen(config_dir)?;
+    manage_screen(config_dir, data_dir)?;
 
     Ok(())
 }
@@ -189,6 +268,9 @@ mod tests {
                 night_temperature: "2800".to_string(),
                 night_gamma: "80".to_string(),
             },
+            cache: CacheConfig {
+                enabled: false,
+            }
         }
     }
 
