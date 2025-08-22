@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_load_config_creates_default() {
-        let temp_dir = std::env::temp_dir().join("sundial_test_default");
+        let temp_dir = std::env::temp_dir().join("sundia_test_creates_default");
         let _ = std::fs::remove_dir_all(&temp_dir);
         let _ = std::fs::create_dir_all(&temp_dir);
 
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_load_config_reads_existing() {
-        let temp_dir = std::env::temp_dir().join("sundial_test_default");
+        let temp_dir = std::env::temp_dir().join("sundial_test_load_config_reads_existing");
         let _ = std::fs::remove_dir_all(&temp_dir);
         let _ = std::fs::create_dir_all(&temp_dir);
 
@@ -408,6 +408,9 @@ day_temperature = "5500"
 day_gamma = "90"
 night_temperature = "3000"
 night_gamma = "70"
+
+[cache]
+enabled = true
 "#;
         std::fs::write(&config_file, custom_config_content).unwrap();
 
@@ -423,6 +426,30 @@ night_gamma = "70"
         assert_eq!(config.screen.day_gamma, "90");
         assert_eq!(config.screen.night_temperature, "3000");
         assert_eq!(config.screen.night_gamma, "70");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_cache_persist_and_load() {
+        let temp_dir = std::env::temp_dir().join("sundial_test_cache_persist_load");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut config = create_test_config();
+        config.cache.enabled = true;
+
+        let sun_times = SunTimes {
+            sunrise: NaiveTime::from_hms_opt(6, 30, 0).unwrap(),
+            sunset: NaiveTime::from_hms_opt(18, 45, 0).unwrap(),
+        };
+
+        let persist_result = persist_to_cache(&config, &temp_dir, &sun_times);
+        assert!(persist_result.unwrap());
+
+        let load_result = load_cache(&config, &temp_dir);
+        let loaded_cache = load_result.unwrap().unwrap();
+        assert_eq!(loaded_cache.sun_times, sun_times);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
