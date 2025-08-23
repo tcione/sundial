@@ -78,6 +78,25 @@ pub fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Er
 }
 
 #[cfg(test)]
+pub fn get_test_config() -> Config {
+    Config {
+        location: LocationConfig {
+            latitude: "52.56".to_string(),
+            longitude: "13.39".to_string(),
+        },
+        screen: ScreenConfig {
+            day_temperature: "6000".to_string(),
+            day_gamma: "100".to_string(),
+            night_temperature: "2800".to_string(),
+            night_gamma: "80".to_string(),
+        },
+        cache: CacheConfig {
+            enabled: false,
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

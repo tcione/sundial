@@ -27,28 +27,11 @@ pub fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes, conf
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn create_test_config() -> Config {
-        Config {
-            location: LocationConfig {
-                latitude: "52.56".to_string(),
-                longitude: "13.39".to_string(),
-            },
-            screen: ScreenConfig {
-                day_temperature: "6000".to_string(),
-                day_gamma: "100".to_string(),
-                night_temperature: "2800".to_string(),
-                night_gamma: "80".to_string(),
-            },
-            cache: CacheConfig {
-                enabled: false,
-            }
-        }
-    }
+    use crate::config::get_test_config;
 
     #[test]
     fn test_calculate_screen_state() {
-        let config = create_test_config();
+        let config = get_test_config();
         let sunrise = NaiveTime::from_hms_opt(6, 0, 0).unwrap();
         let sunset = NaiveTime::from_hms_opt(18, 0, 0).unwrap();
         let sun_times = SunTimes { sunrise, sunset };

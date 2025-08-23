@@ -64,33 +64,15 @@ pub fn persist_to_cache(config: &Config, data_dir: &PathBuf, sun_times: &SunTime
 mod tests {
     use super::*;
     use chrono::NaiveTime;
-    use crate::config::*;
-
-    fn create_test_config() -> Config {
-        Config {
-            location: LocationConfig {
-                latitude: "52.56".to_string(),
-                longitude: "13.39".to_string(),
-            },
-            screen: ScreenConfig {
-                day_temperature: "6000".to_string(),
-                day_gamma: "100".to_string(),
-                night_temperature: "2800".to_string(),
-                night_gamma: "80".to_string(),
-            },
-            cache: CacheConfig {
-                enabled: false,
-            }
-        }
-    }
+    use crate::config::get_test_config;
 
     #[test]
-    fn test_cache_persist_and_load() {
-        let temp_dir = std::env::temp_dir().join("sundial_test_cache_persist_load");
+    fn test_cache_enabled_persist_and_load() {
+        let temp_dir = std::env::temp_dir().join("sundial_test_cache_enabled_persist_load");
         let _ = std::fs::remove_dir_all(&temp_dir);
         std::fs::create_dir_all(&temp_dir).unwrap();
 
-        let mut config = create_test_config();
+        let mut config = get_test_config();
         config.cache.enabled = true;
 
         let sun_times = SunTimes {
@@ -104,6 +86,29 @@ mod tests {
         let load_result = load_cache(&config, &temp_dir);
         let loaded_cache = load_result.unwrap().unwrap();
         assert_eq!(loaded_cache.sun_times, sun_times);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_cache_disabled_persist_and_load() {
+        let temp_dir = std::env::temp_dir().join("sundial_test_cache_disabled_persist_load");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut config = get_test_config();
+        config.cache.enabled = false;
+
+        let sun_times = SunTimes {
+            sunrise: NaiveTime::from_hms_opt(6, 30, 0).unwrap(),
+            sunset: NaiveTime::from_hms_opt(18, 45, 0).unwrap(),
+        };
+
+        let persist_result = persist_to_cache(&config, &temp_dir, &sun_times);
+        assert_eq!(persist_result.unwrap(), false);
+
+        let load_result = load_cache(&config, &temp_dir);
+        assert_eq!(load_result.unwrap(), None);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
