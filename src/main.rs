@@ -12,60 +12,84 @@ use screen::*;
 mod cache;
 use cache::*;
 
-fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
-    let hyprsunset_process = std::process::Command::new("pgrep")
-        .arg("hyprsunset")
-        .output()?;
-    let is_hyprsunset_running = hyprsunset_process.status.success();
-    if is_hyprsunset_running {
-        return Ok(());
-    }
-
-    std::process::Command::new("systemctl")
-        .args(["--user", "start", "hyprsunset"])
-        .output()?;
-
-    Ok(())
+struct Application {
+    config: Config,
+    data_dir: PathBuf,
 }
 
-fn manage_screen(config_dir: PathBuf, data_dir: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let config = load_config(config_dir)?;
-    let sun_times = match load_cache(&config, &data_dir) {
-        Ok(Some(cache)) => { cache.sun_times },
-        Ok(None) => {
-            let url = build_sunrisesunset_url(&config);
-            let sun_times = fetch_sunrise_sunset(&url)?;
-            let _ = persist_to_cache(&config, &data_dir, &sun_times);
-            sun_times
-        },
-        Err(_) => {
-            let url = build_sunrisesunset_url(&config);
-            let sun_times = fetch_sunrise_sunset(&url)?;
-            let _ = persist_to_cache(&config, &data_dir, &sun_times);
-            sun_times
+impl Application {
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let config_dir = get_config_dir()?;
+        let data_dir = get_data_dir()?;
+        let config = load_config(config_dir.clone())?;
+
+        Ok(Application { config, data_dir })
+    }
+
+    #[cfg(test)]
+    fn with_config(config: Config, data_dir: PathBuf) -> Self {
+        Application { config, data_dir }
+    }
+
+    pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+        self.start_hyprsunset()?;
+        self.manage_screen()?;
+
+        Ok(())
+    }
+
+    fn start_hyprsunset(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let hyprsunset_process = std::process::Command::new("pgrep")
+            .arg("hyprsunset")
+            .output()?;
+        let is_hyprsunset_running = hyprsunset_process.status.success();
+        if is_hyprsunset_running {
+            return Ok(());
         }
-    };
-    let now = chrono::Utc::now().time();
-    let screen_state = calculate_screen_state(now, &sun_times, &config);
 
-    std::process::Command::new("hyprctl")
-        .args(["hyprsunset", "temperature", &screen_state.temperature])
-        .output()?;
-    std::process::Command::new("hyprctl")
-        .args(["hyprsunset", "gamma", &screen_state.gamma])
-        .output()?;
+        std::process::Command::new("systemctl")
+            .args(["--user", "start", "hyprsunset"])
+            .output()?;
 
-    Ok(())
+        Ok(())
+    }
+
+    fn get_sun_times(&self) -> Result<SunTimes, Box<dyn std::error::Error>> {
+        Ok(
+            match load_cache(&self.config, &self.data_dir) {
+                Ok(Some(cache)) => { cache.sun_times },
+                Ok(None) => {
+                    let url = build_sunrisesunset_url(&self.config);
+                    let sun_times = fetch_sunrise_sunset(&url)?;
+                    let _ = persist_to_cache(&self.config, &self.data_dir, &sun_times);
+                    sun_times
+                },
+                Err(_) => {
+                    let url = build_sunrisesunset_url(&self.config);
+                    let sun_times = fetch_sunrise_sunset(&url)?;
+                    let _ = persist_to_cache(&self.config, &self.data_dir, &sun_times);
+                    sun_times
+                }
+            }
+        )
+    }
+
+    fn manage_screen(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let sun_times = self.get_sun_times()?;
+        let now = chrono::Utc::now().time();
+        let screen_state = calculate_screen_state(now, &sun_times, &self.config);
+
+        std::process::Command::new("hyprctl")
+            .args(["hyprsunset", "temperature", &screen_state.temperature])
+            .output()?;
+        std::process::Command::new("hyprctl")
+            .args(["hyprsunset", "gamma", &screen_state.gamma])
+            .output()?;
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Sundial starting...");
-
-    let config_dir = get_config_dir()?;
-    let data_dir = get_data_dir()?;
-
-    start_hyprsunset()?;
-    manage_screen(config_dir, data_dir)?;
-
-    Ok(())
+    Application::new()?.run()
 }
