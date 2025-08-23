@@ -80,6 +80,10 @@ mod tests {
             sunset: NaiveTime::from_hms_opt(18, 45, 0).unwrap(),
         };
 
+        // no cache file exists
+        let load_result = load_cache(&config, &temp_dir);
+        assert_eq!(load_result.unwrap(), None);
+
         let persist_result = persist_to_cache(&config, &temp_dir, &sun_times);
         assert!(persist_result.unwrap());
 
