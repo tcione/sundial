@@ -91,7 +91,7 @@ mod tests {
         let loaded_cache = load_result.unwrap().unwrap();
         assert_eq!(loaded_cache.sun_times, sun_times);
 
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 
     #[test]
@@ -114,6 +114,6 @@ mod tests {
         let load_result = load_cache(&config, &temp_dir);
         assert_eq!(load_result.unwrap(), None);
 
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 }

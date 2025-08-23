@@ -26,11 +26,6 @@ impl Application {
         Ok(Application { config, data_dir })
     }
 
-    #[cfg(test)]
-    fn with_config(config: Config, data_dir: PathBuf) -> Self {
-        Application { config, data_dir }
-    }
-
     pub fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.start_hyprsunset()?;
         self.manage_screen()?;
@@ -61,13 +56,13 @@ impl Application {
                 Ok(None) => {
                     let url = build_sunrisesunset_url(&self.config);
                     let sun_times = fetch_sunrise_sunset(&url)?;
-                    let _ = persist_to_cache(&self.config, &self.data_dir, &sun_times);
+                    persist_to_cache(&self.config, &self.data_dir, &sun_times)?;
                     sun_times
                 },
                 Err(_) => {
                     let url = build_sunrisesunset_url(&self.config);
                     let sun_times = fetch_sunrise_sunset(&url)?;
-                    let _ = persist_to_cache(&self.config, &self.data_dir, &sun_times);
+                    persist_to_cache(&self.config, &self.data_dir, &sun_times)?;
                     sun_times
                 }
             }

@@ -104,7 +104,7 @@ mod tests {
     fn test_load_config_creates_default() {
         let temp_dir = std::env::temp_dir().join("sundial_test_load_config_creates_default");
         let _ = std::fs::remove_dir_all(&temp_dir);
-        let _ = std::fs::create_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
 
         let result = load_config(temp_dir.clone());
         assert!(result.is_ok());
@@ -122,14 +122,14 @@ mod tests {
         let config_file = temp_dir.join("config.toml");
         assert!(config_file.exists());
 
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 
     #[test]
     fn test_load_config_reads_existing() {
         let temp_dir = std::env::temp_dir().join("sundial_test_load_config_reads_existing");
         let _ = std::fs::remove_dir_all(&temp_dir);
-        let _ = std::fs::create_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
 
         let config_file = temp_dir.join("config.toml");
         let custom_config_content = r#"
@@ -161,6 +161,6 @@ enabled = true
         assert_eq!(config.screen.night_temperature, "3000");
         assert_eq!(config.screen.night_gamma, "70");
 
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 }
