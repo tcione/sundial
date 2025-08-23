@@ -1,16 +1,16 @@
 use std::path::PathBuf;
 
 mod config;
-use config::*;
+use config::{Config, get_config_dir, load_config};
 
 mod sun_times;
-use sun_times::*;
+use sun_times::{SunTimes, build_sunrisesunset_url, fetch_sunrise_sunset};
 
 mod screen;
-use screen::*;
+use screen::{calculate_screen_state};
 
 mod cache;
-use cache::*;
+use cache::{get_data_dir, load_cache, persist_to_cache};
 
 struct Application {
     config: Config,
