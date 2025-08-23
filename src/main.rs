@@ -1,4 +1,3 @@
-use chrono::NaiveTime;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -8,15 +7,12 @@ use config::*;
 mod sun_times;
 use sun_times::*;
 
+mod screen;
+use screen::*;
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct Cache {
     sun_times: SunTimes,
-}
-
-#[derive(Debug, PartialEq)]
-struct ScreenState {
-    temperature: String,
-    gamma: String,
 }
 
 fn get_data_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -68,22 +64,6 @@ fn persist_to_cache(config: &Config, data_dir: &PathBuf, sun_times: &SunTimes) -
     std::fs::write(cache_file, cache_content)?;
 
     Ok(true)
-}
-
-fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes, config: &Config) -> ScreenState {
-    let is_day = target_time >= sun_times.sunrise && target_time < sun_times.sunset;
-
-    if is_day {
-        return ScreenState {
-            temperature: config.screen.day_temperature.clone(),
-            gamma: config.screen.day_gamma.clone(),
-        };
-    }
-
-    ScreenState {
-        temperature: config.screen.night_temperature.clone(),
-        gamma: config.screen.night_gamma.clone(),
-    }
 }
 
 fn start_hyprsunset() -> Result<(), Box<dyn std::error::Error>> {
@@ -147,6 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveTime;
 
     fn create_test_config() -> Config {
         Config {
@@ -163,61 +144,6 @@ mod tests {
             cache: CacheConfig {
                 enabled: false,
             }
-        }
-    }
-
-    #[test]
-    fn test_calculate_screen_state() {
-        let config = create_test_config();
-        let sunrise = NaiveTime::from_hms_opt(6, 0, 0).unwrap();
-        let sunset = NaiveTime::from_hms_opt(18, 0, 0).unwrap();
-        let sun_times = SunTimes { sunrise, sunset };
-        let test_cases = vec![
-            (
-                NaiveTime::from_hms_opt(02, 0, 00).unwrap(),
-                config.screen.night_temperature.clone(),
-                config.screen.night_gamma.clone(),
-                "Before dawn"
-            ),
-            (
-                NaiveTime::from_hms_opt(05, 0, 59).unwrap(),
-                config.screen.night_temperature.clone(),
-                config.screen.night_gamma.clone(),
-                "Right before sunrise"
-            ),
-            (
-                NaiveTime::from_hms_opt(06, 0, 00).unwrap(),
-                config.screen.day_temperature.clone(),
-                config.screen.day_gamma.clone(),
-                "Sunrise"
-            ),
-            (
-                NaiveTime::from_hms_opt(10, 0, 00).unwrap(),
-                config.screen.day_temperature.clone(),
-                config.screen.day_gamma.clone(),
-                "Day"
-            ),
-            (
-                NaiveTime::from_hms_opt(18, 0, 00).unwrap(),
-                config.screen.night_temperature.clone(),
-                config.screen.night_gamma.clone(),
-                "Sunset"
-            ),
-            (
-                NaiveTime::from_hms_opt(22, 0, 00).unwrap(),
-                config.screen.night_temperature.clone(),
-                config.screen.night_gamma.clone(),
-                "Night"
-            ),
-        ];
-
-        for (time, expected_temperature, expected_gamma, description) in test_cases {
-            let screen_state = calculate_screen_state(time, &sun_times, &config);
-            let expected_screen_state = ScreenState {
-                temperature: expected_temperature,
-                gamma: expected_gamma,
-            };
-            assert_eq!(screen_state, expected_screen_state, "Screen state failed for {}", description);
         }
     }
 
