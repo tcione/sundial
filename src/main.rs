@@ -1,5 +1,6 @@
 use std::path::PathBuf;
-use log::{info, warn, error, debug, trace};
+use notify_rust::{Notification, Timeout, Urgency};
+use log::{info, warn, error, debug };
 
 mod config;
 use config::{Config, get_config_dir, load_config};
@@ -97,7 +98,19 @@ impl Application {
         let now = chrono::Utc::now().time();
         let screen_state = calculate_screen_state(now, &sun_times, &self.config);
 
-        info!("Setting screen to: {:?}", screen_state);
+        let info_log = format!("Setting screen to: {:?}", screen_state);
+        info!("{}", &info_log);
+
+        if log::log_enabled!(log::Level::Trace) {
+            // Swallow error since it doesn't really matter
+            // if it errors out here
+            let _ = Notification::new()
+                    .summary("Sundial")
+                    .body(&info_log)
+                    .timeout(Timeout::Milliseconds(6000))
+                    .urgency(Urgency::Low)
+                    .show()?;
+        }
 
         std::process::Command::new("hyprctl")
             .args(["hyprsunset", "temperature", &screen_state.temperature])
@@ -114,7 +127,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Application::new()?.run() {
         Ok(()) => { Ok(()) },
         Err(error) => {
-            error!("Error: {:?}", error);
+            let err = format!("Error: {:?}", error);
+            error!("{}", &err);
+            Notification::new()
+                .summary("Sundial")
+                .body(&err)
+                .timeout(Timeout::Milliseconds(6000))
+                .urgency(Urgency::Critical)
+                .show()
+                .unwrap();
             panic!("ERROR!ERROR!ERROR!");
         }
     }
