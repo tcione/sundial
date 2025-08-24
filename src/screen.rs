@@ -1,5 +1,5 @@
 use chrono::{NaiveTime, Duration};
-use crate::config::*;
+use crate::config::Config;
 use crate::sun_times::SunTimes;
 
 #[derive(Debug, PartialEq)]
@@ -8,25 +8,25 @@ pub struct ScreenState {
     pub gamma: String,
 }
 
-const FADE_DURATION : Duration = Duration::minutes(60);
-const FADE_STEPS : i64 = 6;
-const STEP_DURATION : i64 = FADE_DURATION.num_minutes() / FADE_STEPS;
-
 fn calculate_fade_state(is_day: bool, target_time: NaiveTime, sun_times: &SunTimes, config: &Config) -> ScreenState {
+    let fade_duration = Duration::minutes(config.screen.fade_duration_in_minutes);
+    let fade_steps = config.screen.fade_steps;
+    let step_duration = fade_duration.num_minutes() / fade_steps;
+
     let temperature_day = config.screen.day_temperature.parse::<i64>().unwrap();
     let temperature_night = config.screen.night_temperature.parse::<i64>().unwrap();
     let temperature_delta = (temperature_day - temperature_night).abs();
-    let temperature_step = temperature_delta / FADE_STEPS;
+    let temperature_step = temperature_delta / fade_steps;
 
     let gamma_day = config.screen.day_gamma.parse::<i64>().unwrap();
     let gamma_night = config.screen.night_gamma.parse::<i64>().unwrap();
     let gamma_delta = (gamma_day - gamma_night).abs();
-    let gamma_step = gamma_delta / FADE_STEPS;
+    let gamma_step = gamma_delta / fade_steps;
 
     let diff_base = if is_day { sun_times.sunset } else { sun_times.sunrise };
     let difference_in_mins = (diff_base - target_time).num_minutes();
-    let current_step = difference_in_mins / STEP_DURATION;
-    let factor  = FADE_STEPS - current_step;
+    let current_step = difference_in_mins / step_duration;
+    let factor  = fade_steps - current_step;
 
     let temperature;
     let gamma;
@@ -42,12 +42,13 @@ fn calculate_fade_state(is_day: bool, target_time: NaiveTime, sun_times: &SunTim
 }
 
 pub fn calculate_screen_state(target_time: NaiveTime, sun_times: &SunTimes, config: &Config) -> ScreenState {
+    let fade_duration = Duration::minutes(config.screen.fade_duration_in_minutes);
     let is_day = target_time >= sun_times.sunrise && target_time < sun_times.sunset;
     let fading_into_day = !is_day &&
-                          target_time > sun_times.sunrise - FADE_DURATION &&
+                          target_time > sun_times.sunrise - fade_duration &&
                           target_time < sun_times.sunrise;
     let fading_into_night = is_day &&
-                            target_time > sun_times.sunset - FADE_DURATION &&
+                            target_time > sun_times.sunset - fade_duration &&
                             target_time < sun_times.sunset;
 
     if fading_into_night || fading_into_day {

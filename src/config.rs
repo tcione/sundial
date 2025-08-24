@@ -20,6 +20,8 @@ pub struct ScreenConfig {
     pub day_gamma: String,
     pub night_temperature: String,
     pub night_gamma: String,
+    pub fade_steps: i64,
+    pub fade_duration_in_minutes: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -33,6 +35,8 @@ const DAY_TEMPERATURE: &str = "6000";
 const DAY_GAMMA: &str = "100";
 const NIGHT_TEMPERATURE: &str = "2800";
 const NIGHT_GAMMA: &str = "80";
+const FADE_STEPS: i64 = 6;
+const FADE_DURATION_IN_MINUTES: i64 = 60;
 const CACHE_ENABLED: bool = true;
 
 pub fn get_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -65,6 +69,8 @@ pub fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Er
             day_gamma: DAY_GAMMA.to_string(),
             night_temperature: NIGHT_TEMPERATURE.to_string(),
             night_gamma: NIGHT_GAMMA.to_string(),
+            fade_steps: FADE_STEPS,
+            fade_duration_in_minutes: FADE_DURATION_IN_MINUTES,
         },
         cache: CacheConfig {
             enabled: CACHE_ENABLED,
@@ -89,6 +95,8 @@ pub fn get_test_config() -> Config {
             day_gamma: "100".to_string(),
             night_temperature: "2800".to_string(),
             night_gamma: "80".to_string(),
+            fade_steps: 6,
+            fade_duration_in_minutes: 60,
         },
         cache: CacheConfig {
             enabled: false,
@@ -142,6 +150,8 @@ day_temperature = "5500"
 day_gamma = "90"
 night_temperature = "3000"
 night_gamma = "70"
+fade_steps = 12
+fade_duration_in_minutes = 120
 
 [cache]
 enabled = true
@@ -160,6 +170,8 @@ enabled = true
         assert_eq!(config.screen.day_gamma, "90");
         assert_eq!(config.screen.night_temperature, "3000");
         assert_eq!(config.screen.night_gamma, "70");
+        assert_eq!(config.screen.fade_steps, 12);
+        assert_eq!(config.screen.fade_duration_in_minutes, 120);
 
         std::fs::remove_dir_all(&temp_dir).unwrap();
     }
