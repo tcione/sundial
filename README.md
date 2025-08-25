@@ -32,10 +32,10 @@ enabled = true
 Tweak it to your liking.
 
 ### Running the program
-Although this can be run as a standalone program, this is designed to be triggered in a schedule. My personal recommendation is using a oneshot systemd service + a systemd timer.
+Although this can be run as a standalone program, this is designed to be triggered in a schedule. My personal recommendation is using a oneshot systemd service + a systemd timer (this comes out of the box if you are using the nix flake).
 
 ## Roadmap // TODO
-- [ ] Nix flake for easy setup
+- [x] Nix flake for easy setup
 - [ ] Maybe automatically fetch user coordinates
 
 ## Notes
