@@ -1,7 +1,7 @@
 # Sundial - Rust CLI Project
 
 ## Project Goal
-A Rust CLI application that controls screen temperature (via hyprsunseet) based on sunrise/sunset times.
+A Rust CLI application that controls screen temperature (via hyprsunset) based on sunrise/sunset times.
 
 ## Architecture
 
