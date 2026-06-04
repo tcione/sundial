@@ -14,6 +14,9 @@ use screen::{calculate_screen_state};
 mod cache;
 use cache::get_data_dir;
 
+mod location;
+use location::resolve_location;
+
 struct Application {
     config: Config,
     data_dir: PathBuf,
@@ -62,8 +65,7 @@ impl Application {
     }
 
     fn get_sun_times(&self) -> SunTimes {
-        let latitude = self.config.location.latitude.parse::<f64>().unwrap_or(0.0);
-        let longitude = self.config.location.longitude.parse::<f64>().unwrap_or(0.0);
+        let (latitude, longitude) = resolve_location(&self.config, &self.data_dir);
         let today = chrono::Utc::now().date_naive();
 
         let sun_times = compute_sun_times(latitude, longitude, today);

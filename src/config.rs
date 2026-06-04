@@ -10,8 +10,18 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LocationConfig {
+    #[serde(default)]
+    pub mode: LocationMode,
     pub latitude: String,
     pub longitude: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LocationMode {
+    #[default]
+    Auto,
+    Fixed,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -59,6 +69,7 @@ pub fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Er
 
     let default_config = Config {
         location: LocationConfig {
+            mode: LocationMode::Auto,
             latitude: BERLIN_LAT.to_string(),
             longitude: BERLIN_LON.to_string(),
         },
@@ -84,6 +95,7 @@ pub fn load_config(config_dir: PathBuf) -> Result<Config, Box<dyn std::error::Er
 pub fn get_test_config() -> Config {
     Config {
         location: LocationConfig {
+            mode: LocationMode::Fixed,
             latitude: "52.56".to_string(),
             longitude: "13.39".to_string(),
         },
@@ -116,6 +128,7 @@ mod tests {
         let config = result.unwrap();
 
         // Default values
+        assert_eq!(config.location.mode, LocationMode::Auto);
         assert_eq!(config.location.latitude, "52.56");
         assert_eq!(config.location.longitude, "13.39");
         assert_eq!(config.screen.day_temperature, "6000");
