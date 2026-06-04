@@ -102,20 +102,26 @@ impl Application {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    match Application::new()?.run() {
-        Ok(()) => { Ok(()) },
-        Err(error) => {
-            let err = format!("Error: {:?}", error);
-            error!("{}", &err);
-            Notification::new()
-                .summary("Sundial")
-                .body(&err)
-                .timeout(Timeout::Milliseconds(6000))
-                .urgency(Urgency::Critical)
-                .show()
-                .unwrap();
-            panic!("ERROR!ERROR!ERROR!");
-        }
+fn report_failure(error: Box<dyn std::error::Error>) -> ! {
+    error!("Sundial failed: {:?}", error);
+
+    let _ = Notification::new()
+        .summary("Sundial")
+        .body("Sundial isn't working properly. Check the logs: journalctl --user")
+        .timeout(Timeout::Milliseconds(6000))
+        .urgency(Urgency::Normal)
+        .show();
+
+    std::process::exit(1);
+}
+
+fn main() {
+    let application = match Application::new() {
+        Ok(application) => application,
+        Err(error) => report_failure(error),
+    };
+
+    if let Err(error) = application.run() {
+        report_failure(error);
     }
 }
