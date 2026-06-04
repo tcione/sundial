@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 use notify_rust::{Notification, Timeout, Urgency};
-use log::{info, warn, error, debug };
+use log::{info, error, debug };
 
 mod config;
 use config::{Config, get_config_dir, load_config};
 
 mod sun_times;
-use sun_times::{SunTimes, build_sunrisesunset_url, fetch_sunrise_sunset};
+use sun_times::{SunTimes, compute_sun_times};
 
 mod screen;
 use screen::{calculate_screen_state};
 
 mod cache;
-use cache::{get_data_dir, load_cache, persist_to_cache};
+use cache::get_data_dir;
 
 struct Application {
     config: Config,
@@ -61,40 +61,19 @@ impl Application {
         Ok(())
     }
 
-    fn get_sun_times(&self) -> Result<SunTimes, Box<dyn std::error::Error>> {
-        Ok(
-            match load_cache(&self.config, &self.data_dir) {
-                Ok(Some(cache)) => {
-                    let cached_sun_times = cache.sun_times;
+    fn get_sun_times(&self) -> SunTimes {
+        let latitude = self.config.location.latitude.parse::<f64>().unwrap_or(0.0);
+        let longitude = self.config.location.longitude.parse::<f64>().unwrap_or(0.0);
+        let today = chrono::Utc::now().date_naive();
 
-                    debug!("Cached sun_times in UTC: {:?}", cached_sun_times);
+        let sun_times = compute_sun_times(latitude, longitude, today);
+        debug!("Computed sun_times in UTC: {:?}", sun_times);
 
-                    cached_sun_times
-                },
-                Ok(None) => {
-                    let url = build_sunrisesunset_url(&self.config);
-                    let sun_times = fetch_sunrise_sunset(&url)?;
-                    persist_to_cache(&self.config, &self.data_dir, &sun_times)?;
-
-                    debug!("[No cache] Fresh sun_times in UTC: {:?}", sun_times);
-
-                    sun_times
-                },
-                Err(_) => {
-                    let url = build_sunrisesunset_url(&self.config);
-                    let sun_times = fetch_sunrise_sunset(&url)?;
-                    persist_to_cache(&self.config, &self.data_dir, &sun_times)?;
-
-                    warn!("[Cache error] Fresh sun_times in UTC: {:?}", sun_times);
-
-                    sun_times
-                }
-            }
-        )
+        sun_times
     }
 
     fn manage_screen(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let sun_times = self.get_sun_times()?;
+        let sun_times = self.get_sun_times();
         let now = chrono::Utc::now().time();
         let screen_state = calculate_screen_state(now, &sun_times, &self.config);
 

@@ -1796,7 +1796,17 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sunrise",
  "toml",
+]
+
+[[package]]
+name = "sunrise"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15eecb5ec59a060dd9fe8f88c48b701abecd6be9d9c28d55081b80bdda73981c"
+dependencies = [
+ "chrono",
 ]
 
 [[package]]

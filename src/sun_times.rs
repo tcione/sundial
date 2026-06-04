@@ -1,6 +1,6 @@
-use chrono::NaiveTime;
+use chrono::{NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
-use crate::config::Config;
+use sunrise::{Coordinates, SolarDay, SolarEvent};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct SunTimes {
@@ -8,77 +8,49 @@ pub struct SunTimes {
     pub sunset: NaiveTime,
 }
 
-#[derive(Debug, Deserialize)]
-struct ApiResponse {
-    results: ApiResults,
-}
+pub fn compute_sun_times(latitude: f64, longitude: f64, date: NaiveDate) -> SunTimes {
+    let default_sunrise = NaiveTime::from_hms_opt(6, 0, 0).unwrap();
+    let default_sunset = NaiveTime::from_hms_opt(18, 0, 0).unwrap();
 
-#[derive(Debug, Deserialize)]
-struct ApiResults {
-    sunrise: String,
-    sunset: String,
-}
+    let Some(coordinates) = Coordinates::new(latitude, longitude) else {
+        return SunTimes {
+            sunrise: default_sunrise,
+            sunset: default_sunset,
+        };
+    };
 
-pub fn build_sunrisesunset_url(config: &Config) -> String {
-    format!(
-        "https://api.sunrisesunset.io/json?lat={}&lng={}&time_format=unix",
-        config.location.latitude,
-        config.location.longitude,
-    )
-}
+    let solar_day = SolarDay::new(coordinates, date);
+    let sunrise = solar_day
+        .event_time(SolarEvent::Sunrise)
+        .map(|moment| moment.time())
+        .unwrap_or(default_sunrise);
+    let sunset = solar_day
+        .event_time(SolarEvent::Sunset)
+        .map(|moment| moment.time())
+        .unwrap_or(default_sunset);
 
-pub fn fetch_sunrise_sunset(url: &str) -> Result<SunTimes, Box<dyn std::error::Error>> {
-    let response = reqwest::blocking::get(url)?;
-    let api_response: ApiResponse = response.json()?;
-
-    let sunrise_timestamp: i64 = api_response.results.sunrise.parse()?;
-    let sunset_timestamp: i64 = api_response.results.sunset.parse()?;
-
-    let sunrise = chrono::DateTime::from_timestamp(sunrise_timestamp, 0).ok_or("Invalid sunrise timestamp")?.time();
-    let sunset = chrono::DateTime::from_timestamp(sunset_timestamp, 0).ok_or("Invalid sunset timestamp")?.time();
-
-    Ok(SunTimes { sunrise, sunset })
+    SunTimes { sunrise, sunset }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::Server;
 
     #[test]
-    fn test_fetch_sunrise_sunset() {
-        let mut server = Server::new();
-        let url_path = format!("/json?lat={}&lng={}&time_format=unix", "13.54", "43.12");
-        let mock = server.mock("GET", url_path.as_str())
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(r#"{
-              "results": {
-                "date": "2025-08-17",
-                "sunrise": "1755402810",
-                "sunset": "1755455425",
-                "first_light": "1755393963",
-                "last_light": "1755464272",
-                "dawn": "1755400509",
-                "dusk": "1755457726",
-                "solar_noon": "1755429118",
-                "golden_hour": "1755452571",
-                "day_length": "14:36:55",
-                "timezone": "UTC",
-                "utc_offset": 0
-              },
-              "status": "OK"
-            }"#)
-            .create();
-        let mock_url = format!("{}{}", server.url(), url_path);
+    fn test_compute_sun_times() {
+        let date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+        let result = compute_sun_times(0.0, 0.0, date);
 
-        let result = fetch_sunrise_sunset(&mock_url).unwrap();
-        let expected_result = SunTimes {
-            sunrise: chrono::DateTime::from_timestamp(1755402810, 0).unwrap().time(),
-            sunset: chrono::DateTime::from_timestamp(1755455425, 0).unwrap().time(),
-        };
+        assert_eq!(result.sunrise, NaiveTime::from_hms_opt(5, 59, 54).unwrap());
+        assert_eq!(result.sunset, NaiveTime::from_hms_opt(18, 7, 8).unwrap());
+    }
 
-        assert_eq!(result, expected_result);
-        mock.assert();
+    #[test]
+    fn test_compute_sun_times_polar_fallback() {
+        let date = NaiveDate::from_ymd_opt(1970, 8, 1).unwrap();
+        let result = compute_sun_times(85.0, 0.0, date);
+
+        assert_eq!(result.sunrise, NaiveTime::from_hms_opt(6, 0, 0).unwrap());
+        assert_eq!(result.sunset, NaiveTime::from_hms_opt(18, 0, 0).unwrap());
     }
 }
