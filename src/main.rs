@@ -109,9 +109,9 @@ fn report_failure(error: Box<dyn std::error::Error>) -> ! {
 
     let _ = Notification::new()
         .summary("Sundial")
-        .body("Sundial isn't working properly. Check the logs: journalctl --user")
-        .timeout(Timeout::Milliseconds(6000))
-        .urgency(Urgency::Normal)
+        .body("Sundial isn't working properly. Check the logs: journalctl --user -t sundial")
+        .timeout(Timeout::Milliseconds(3000))
+        .urgency(Urgency::Critical)
         .show();
 
     std::process::exit(1);
