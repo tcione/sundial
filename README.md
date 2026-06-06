@@ -3,10 +3,10 @@
 A companion program for [hyprsunset](https://github.com/hyprwm/hyprsunset). It focuses on setting up screen temperature and gamma based on local sunrise and sunset times.
 
 ## Features
-- Dynamic day and night temperature+gamma based on arbitrary latitude and longitude.
+- Dynamic day and night temperature+gamma based on fixed or dynamic (IP based) latitude and longitude.
 - Automatic hyprsunset management via hyprctl and systemctl.
 - Smooth transition between day and night settings.
-- Daily caching of sunset and sunrise times to avoid unecessary API calls
+- Daily caching of location to avoid unecessary API calls
 
 ## Setup
 
@@ -33,7 +33,7 @@ enabled = true
 Tweak it to your liking. `location.mode` is `"auto"` (resolve coordinates via IP geolocation) or `"fixed"` (use the `latitude`/`longitude` below).
 
 #### Declarative configuration (Home Manager)
-The Home Manager module exposes a `settings` option that is written to `~/.config/sundial/config.toml`, so the whole configuration can be managed declaratively:
+The Home Manager module exposes a settings attributes, so the configuration can be managed declaratively:
 
 ```nix
 services.sundial = {
@@ -56,7 +56,7 @@ services.sundial = {
 };
 ```
 
-`settings` mirrors the TOML schema above one-to-one. When set, provide a complete config (all of `location`, `screen` and `cache`) since the app rejects a partial file. When omitted, no file is written and sundial generates its own defaults on first run.
+`settings` mirrors the TOML schema above one-to-one. When set, provide a complete config (all of `location`, `screen` and `cache`), no attributes are optional. When omitted, no file is written and sundial generates its own defaults on first run.
 
 The NixOS module manages only the service and timer; declarative config is Home Manager only, since the file lives in the user's home.
 
