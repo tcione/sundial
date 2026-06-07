@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{LazyLock, mpsc};
+use std::thread;
 use std::time::Duration;
 
 use log::{debug, warn};
@@ -6,10 +9,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, LocationMode};
 
-const GEO_URL: &str = "https://ipinfo.io/json";
-const GEO_TIMEOUT: Duration = Duration::from_secs(5);
+static TIMEZONE_COORDS: LazyLock<HashMap<String, (f64, f64)>> = LazyLock::new(|| {
+    let raw: HashMap<String, [f64; 2]> =
+        serde_json::from_str(include_str!("../data/timezone_coords.json"))
+            .expect("bundled timezone_coords.json is malformed");
+    raw.into_iter().map(|(k, v)| (k, (v[0], v[1]))).collect()
+});
+
 const BOOT_ID_PATH: &str = "/proc/sys/kernel/random/boot_id";
 const CACHE_FILE: &str = "location.json";
+const GEOCLUE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Serialize, Deserialize)]
 struct LocationCache {
@@ -17,11 +26,6 @@ struct LocationCache {
     longitude: f64,
     date: String,
     boot_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct IpInfoResponse {
-    loc: String,
 }
 
 pub fn resolve_location(config: &Config, data_dir: &PathBuf) -> (f64, f64) {
@@ -42,18 +46,17 @@ pub fn resolve_location(config: &Config, data_dir: &PathBuf) -> (f64, f64) {
         return (cache.latitude, cache.longitude);
     }
 
-    match detect_location() {
+    let detected = detect_location_geoclue()
+        .inspect_err(|e| warn!("GeoClue2 location failed ({}); trying timezone fallback", e))
+        .or_else(|_| detect_location_timezone())
+        .inspect_err(|e| warn!("Timezone location failed ({}); falling back to last known location", e));
+
+    match detected {
         Ok((latitude, longitude)) => {
-            debug!("Detected location via IP: ({}, {})", latitude, longitude);
             persist_location_cache(data_dir, latitude, longitude, &today, boot_id.as_deref());
             (latitude, longitude)
         }
-        Err(error) => {
-            warn!("IP geolocation failed ({}); falling back to last known location", error);
-            cache
-                .map(|cache| (cache.latitude, cache.longitude))
-                .unwrap_or(fallback)
-        }
+        Err(_) => cache.map(|c| (c.latitude, c.longitude)).unwrap_or(fallback),
     }
 }
 
@@ -72,22 +75,104 @@ fn needs_refresh(cache: Option<&LocationCache>, today: &str, boot_id: Option<&st
     }
 }
 
-fn detect_location() -> Result<(f64, f64), Box<dyn std::error::Error>> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(GEO_TIMEOUT)
-        .build()?;
-    let response: IpInfoResponse = client.get(GEO_URL).send()?.json()?;
+fn detect_location_geoclue() -> Result<(f64, f64), Box<dyn std::error::Error>> {
+    let (tx, rx) = mpsc::channel::<Result<(f64, f64), String>>();
 
-    parse_loc(&response.loc)
+    thread::spawn(move || {
+        let _ = tx.send(geoclue_query());
+    });
+
+    rx.recv_timeout(GEOCLUE_TIMEOUT)
+        .map_err(|_| "GeoClue2 timed out".into())
+        .and_then(|r| r.map_err(|e| e.into()))
 }
 
-fn parse_loc(loc: &str) -> Result<(f64, f64), Box<dyn std::error::Error>> {
-    let mut parts = loc.split(',');
-    let latitude = parts.next().ok_or("missing latitude")?.trim().parse::<f64>()?;
-    let longitude = parts.next().ok_or("missing longitude")?.trim().parse::<f64>()?;
+fn geoclue_query() -> Result<(f64, f64), String> {
+    use zbus::blocking::{Connection, Proxy};
+    use zbus::zvariant::OwnedObjectPath;
 
+    let conn = Connection::system().map_err(|e| e.to_string())?;
+
+    let manager = Proxy::new(
+        &conn,
+        "org.freedesktop.GeoClue2",
+        "/org/freedesktop/GeoClue2/Manager",
+        "org.freedesktop.GeoClue2.Manager",
+    )
+    .map_err(|e| e.to_string())?;
+
+    let client_path: OwnedObjectPath = manager.call("GetClient", &()).map_err(|e| e.to_string())?;
+
+    let client = Proxy::new(
+        &conn,
+        "org.freedesktop.GeoClue2",
+        client_path.as_str(),
+        "org.freedesktop.GeoClue2.Client",
+    )
+    .map_err(|e| e.to_string())?;
+
+    client
+        .set_property("DesktopId", "sundial")
+        .map_err(|e| e.to_string())?;
+
+    // Subscribe before Start to avoid missing the signal
+    let mut signals = client
+        .receive_signal("LocationUpdated")
+        .map_err(|e| e.to_string())?;
+
+    client
+        .call::<_, _, ()>("Start", &())
+        .map_err(|e| e.to_string())?;
+
+    let msg = signals.next().ok_or("no LocationUpdated signal received")?;
+    let (_, new_path): (OwnedObjectPath, OwnedObjectPath) =
+        msg.body().deserialize().map_err(|e| e.to_string())?;
+
+    let location = Proxy::new(
+        &conn,
+        "org.freedesktop.GeoClue2",
+        new_path.as_str(),
+        "org.freedesktop.GeoClue2.Location",
+    )
+    .map_err(|e| e.to_string())?;
+
+    let latitude: f64 = location.get_property("Latitude").map_err(|e| e.to_string())?;
+    let longitude: f64 = location.get_property("Longitude").map_err(|e| e.to_string())?;
+
+    let _ = client.call::<_, _, ()>("Stop", &());
+
+    debug!("Detected location via GeoClue2: ({}, {})", latitude, longitude);
     Ok((latitude, longitude))
 }
+
+fn detect_location_timezone() -> Result<(f64, f64), Box<dyn std::error::Error>> {
+    let tz = system_timezone().ok_or("cannot determine system timezone")?;
+    TIMEZONE_COORDS
+        .get(&tz)
+        .copied()
+        .ok_or_else(|| format!("no coordinates for timezone '{}'", tz).into())
+        .inspect(|(lat, lon)| debug!("Detected location via timezone '{}': ({}, {})", tz, lat, lon))
+}
+
+fn system_timezone() -> Option<String> {
+    if let Ok(path) = std::fs::read_link("/etc/localtime") {
+        if let Some(s) = path.to_str() {
+            if let Some(idx) = s.find("zoneinfo/") {
+                return Some(s[idx + 9..].to_string());
+            }
+        }
+    }
+
+    if let Ok(content) = std::fs::read_to_string("/etc/timezone") {
+        let tz = content.trim().to_string();
+        if !tz.is_empty() {
+            return Some(tz);
+        }
+    }
+
+    std::env::var("TZ").ok()
+}
+
 
 fn parse_config_location(config: &Config) -> (f64, f64) {
     let latitude = config.location.latitude.parse::<f64>().unwrap_or(0.0);
@@ -141,18 +226,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_loc() {
-        assert_eq!(parse_loc("37.38,-122.08").unwrap(), (37.38, -122.08));
-        assert_eq!(parse_loc(" 52.56 , 13.39 ").unwrap(), (52.56, 13.39));
-    }
-
-    #[test]
-    fn test_parse_loc_invalid() {
-        assert!(parse_loc("not-a-location").is_err());
-        assert!(parse_loc("52.56").is_err());
-    }
-
-    #[test]
     fn test_needs_refresh_without_cache() {
         assert!(needs_refresh(None, "2026-06-04", Some("boot-a")));
     }
@@ -179,5 +252,27 @@ mod tests {
     fn test_needs_refresh_ignores_unreadable_boot_id() {
         let cache = cache("2026-06-04", "boot-a");
         assert!(!needs_refresh(Some(&cache), "2026-06-04", None));
+    }
+
+    #[test]
+    fn test_timezone_coords_known() {
+        let (lat, lon) = TIMEZONE_COORDS.get("Europe/Berlin").copied().unwrap();
+        assert!((lat - 52.52).abs() < 0.1);
+        assert!((lon - 13.40).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_timezone_coords_unknown() {
+        assert!(TIMEZONE_COORDS.get("Invalid/Timezone").is_none());
+    }
+
+    #[test]
+    fn test_timezone_coords_aliases() {
+        assert!(TIMEZONE_COORDS.get("Asia/Kolkata").is_some());
+        assert!(TIMEZONE_COORDS.get("Asia/Calcutta").is_some());
+        assert_eq!(
+            TIMEZONE_COORDS.get("Asia/Kolkata"),
+            TIMEZONE_COORDS.get("Asia/Calcutta"),
+        );
     }
 }

@@ -1,10 +1,10 @@
 [package]
 name = "sundial"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2024"
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls"], default-features = false }
+zbus = { version = "4", features = ["blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
