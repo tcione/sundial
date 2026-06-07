@@ -71,6 +71,15 @@ Then restart the GeoClue2 service: `sudo systemctl restart geoclue`
 
 If GeoClue2 is unavailable or not authorised, sundial falls back silently to the timezone-based approximation.
 
+#### Location cache
+
+Because sundial is designed to run on short intervals (every 1–10 minutes), re-running the full detection chain on every invocation would be wasteful. The detected location is cached and reused until either:
+
+- **A new day begins** — ensures location is refreshed roughly every 24 hours, so travelling without rebooting (e.g. on a laptop that stays on) still gets an updated position the next day.
+- **The system reboots** — a new boot ID is written to `/proc/sys/kernel/random/boot_id` on every boot, invalidating the cache immediately.
+
+The cache is stored in the user data directory (typically `~/.local/share/sundial/location.json`). It can be disabled by setting `cache.enabled = false` in `config.toml`, in which case detection runs on every invocation.
+
 #### Declarative configuration (Home Manager)
 The Home Manager module exposes a settings attributes, so the configuration can be managed declaratively:
 
