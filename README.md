@@ -41,7 +41,7 @@ In `auto` mode sundial tries the following sources in order, using the first one
 3. **Cached location** — the last successfully detected position.
 4. **Config default** — the `latitude`/`longitude` values in `config.toml`.
 
-GeoClue2 requires the app to be explicitly authorised. How to do that depends on your setup:
+GeoClue2 requires the app to be explicitly authorized. How to do that depends on your setup:
 
 **NixOS** — add to your system configuration:
 
@@ -56,7 +56,7 @@ services.geoclue2 = {
 };
 ```
 
-**GNOME / KDE** — the desktop location agent authorises apps on your behalf automatically. No extra steps needed as long as location services are enabled in system settings.
+**GNOME / KDE** — the desktop location agent authorizes apps on your behalf automatically. No extra steps needed as long as location services are enabled in system settings.
 
 **Other distros (manual)** — add the following to `/etc/geoclue/geoclue.conf`:
 
@@ -69,23 +69,23 @@ users=
 
 Then restart the GeoClue2 service: `sudo systemctl restart geoclue`
 
-If GeoClue2 is unavailable or not authorised, sundial falls back silently to the timezone-based approximation.
+If GeoClue2 is unavailable or not authorized, sundial falls back silently to the timezone-based approximation.
 
 #### Location cache
 
-Because sundial is designed to run on short intervals (every 1–10 minutes), re-running the full detection chain on every invocation would be wasteful. The detected location is cached and reused until either:
+Because sundial is designed to run on short intervals, re-running the full detection chain on every invocation would be wasteful. Cache is refreshed every system reboot OR every 24h (whatever happens first).
 
-- **A new day begins** — ensures location is refreshed roughly every 24 hours, so travelling without rebooting (e.g. on a laptop that stays on) still gets an updated position the next day.
-- **The system reboots** — a new boot ID is written to `/proc/sys/kernel/random/boot_id` on every boot, invalidating the cache immediately.
-
-The cache is stored in the user data directory (typically `~/.local/share/sundial/location.json`). It can be disabled by setting `cache.enabled = false` in `config.toml`, in which case detection runs on every invocation.
+Cache is stored in the user data directory (typically `~/.local/share/sundial/location.json`). It can be disabled by setting `cache.enabled = false` in `config.toml`.
 
 #### Declarative configuration (Home Manager)
-The Home Manager module exposes a settings attributes, so the configuration can be managed declaratively:
+
+The Home Manager module exposes a "settings" attributes:
 
 ```nix
 services.sundial = {
   enable = true;
+  interval = "*:0/1"; # optional
+  logLevel = "info"; # optional
   settings = {
     location = {
       mode = "fixed";
@@ -104,13 +104,9 @@ services.sundial = {
 };
 ```
 
-`settings` mirrors the TOML schema above one-to-one. When set, provide a complete config (all of `location`, `screen` and `cache`), no attributes are optional. When omitted, no file is written and sundial generates its own defaults on first run.
+`settings` mirrors the TOML schema above one-to-one and all keys are mandatory.
 
 The NixOS module manages only the service and timer; declarative config is Home Manager only, since the file lives in the user's home.
 
 ### Running the program
-Although this can be run as a standalone program, this is designed to be triggered in a schedule. My personal recommendation is using a oneshot systemd service + a systemd timer (this comes out of the box if you are using the nix flake).
-
-## Recognition // Gratitude
-- [Hyprland](https://github.com/hyprwm/Hyprland) and [hyprsunset](https://github.com/hyprwm/hyprsunset), since I enjoy both so much
-- [SunriseSunset.io](https://sunrisesunset.io/api/) for providing the amazing API that makes this project possible
+Although this can be run as a standalone program, this is designed to be triggered in a schedule every 1 to 10 mins. My personal recommendation is using a oneshot systemd service + a systemd timer (this comes out of the box if you are using the nix flake).
